@@ -1,0 +1,32 @@
+# FastAPI - современный веб-фреймворк для создания API
+fastapi==0.115.6
+
+# Uvicorn - ASGI сервер для запуска FastAPI приложений
+uvicorn[standard]==0.24.0
+
+# SQLAlchemy - ORM для работы с базами данных
+sqlalchemy
+
+# Redis - клиент для работы с Redis (кэширование, очереди)
+redis==5.0.1
+
+# Celery - распределенная очередь задач
+celery==5.3.4
+
+pydantic==2.10.6
+
+# Pydantic-settings - для конфигурации
+pydantic-settings==2.10.1
+
+# Requests - HTTP библиотека для синхронных запросов
+requests==2.31.0
+
+# Python-dotenv - загрузка переменных окружения из .env файлов
+python-dotenv==1.0.0
+
+# Альтернатива aiohttp (не требует компиляции)
+httpx==0.25.2 
+
+psycopg2-binary==2.9.10
+
+email-validator==2.2.0
