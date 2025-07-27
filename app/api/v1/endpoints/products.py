@@ -1,72 +1,125 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from typing import List
-from app.database import get_db
-from app.schemas.product import Product, ProductCreate, ProductUpdate
-from app.models.product import Product as ProductModel
-
+from app.database import get_async_db
+from app.models.product import Product
+from app.schemas.product import Product as ProductSchema, ProductCreate, ProductUpdate
 
 router = APIRouter()
 
-@router.post("/", response_model=Product, status_code=status.HTTP_201_CREATED)
-def create_product(product: ProductCreate, db: Session = Depends(get_db)):
-    db_product = ProductModel(
-        name=product.name,
-        description=product.description,
-         amazon_url=str(product.amazon_url) if product.amazon_url else None,
-        wildberries_url=str(product.wildberries_url) if product.wildberries_url else None,
-        ozon_url=str(product.ozon_url) if product.ozon_url else None,
-  
-    )
-
+@router.post("/", response_model=ProductSchema, status_code=status.HTTP_201_CREATED)
+async def create_product(
+    product: ProductCreate, 
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Создать новый продукт для мониторинга
+    """
+    # Преобразуем HttpUrl в строки для сохранения в БД
+    product_data = product.model_dump()
+    if product_data.get('amazon_url'):
+        product_data['amazon_url'] = str(product_data['amazon_url'])
+    if product_data.get('wildberries_url'):
+        product_data['wildberries_url'] = str(product_data['wildberries_url'])
+    if product_data.get('ozon_url'):
+        product_data['ozon_url'] = str(product_data['ozon_url'])
+    
+    db_product = Product(**product_data)
+    
     db.add(db_product)
-    db.commit()
-    db.refresh(db_product)
-
-    #здесь будет вывод сервиса поиска товаров на маркетплейсах
+    await db.commit()
+    await db.refresh(db_product)
+    
     return db_product
 
-@router.get("/", response_model=List[Product])
-def read_product(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    products = db.query(ProductModel).offset(skip).limit(limit).all()
+@router.get("/", response_model=List[ProductSchema])
+async def read_products(
+    skip: int = 0, 
+    limit: int = 100, 
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Получить список продуктов
+    """
+    result = await db.execute(
+        select(Product).offset(skip).limit(limit)
+    )
+    products = result.scalars().all()
     return products
 
-@router.get("/{product_id}", response_model=Product)
-def read_products(product_id: int, db: Session = Depends(get_db)):
-    db_product = db.query(ProductModel).filter(ProductModel.id == product_id).first()
-    if db_product is None:  
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Товар не найден"
-        )
-    return db_product
+@router.get("/{product_id}", response_model=ProductSchema)
+async def read_product(
+    product_id: int, 
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Получить продукт по ID
+    """
+    result = await db.execute(
+        select(Product).where(Product.id == product_id)
+    )
+    product = result.scalar_one_or_none()
+    
+    if product is None:
+        raise HTTPException(status_code=404, detail="Продукт не найден")
+    
+    return product
 
-@router.put("/{product_id}", response_model=Product)
-def update_product(product_id: int, product: ProductUpdate, db: Session = Depends(get_db)):
-    db_product = db.query(ProductModel).filter(ProductModel.id == product_id).first()
-    if db_product is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Товар не найден"
-        )
-
-    update_data = product.model_dump(exclude_unset=True)
+@router.put("/{product_id}", response_model=ProductSchema)
+async def update_product(
+    product_id: int, 
+    product_update: ProductUpdate, 
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Обновить данные продукта
+    """
+    result = await db.execute(
+        select(Product).where(Product.id == product_id)
+    )
+    product = result.scalar_one_or_none()
+    
+    if product is None:
+        raise HTTPException(status_code=404, detail="Продукт не найден")
+    
+    # Получаем данные для обновления
+    update_data = product_update.model_dump(exclude_unset=True)
+    
+    # Преобразуем HttpUrl в строки
+    if 'amazon_url' in update_data and update_data['amazon_url']:
+        update_data['amazon_url'] = str(update_data['amazon_url'])
+    if 'wildberries_url' in update_data and update_data['wildberries_url']:
+        update_data['wildberries_url'] = str(update_data['wildberries_url'])
+    if 'ozon_url' in update_data and update_data['ozon_url']:
+        update_data['ozon_url'] = str(update_data['ozon_url'])
+    
+    # Обновляем поля
     for field, value in update_data.items():
-        if field in ['amazon_url', 'wildberries_url', 'ozon_url'] and value is not None:
-            value = str(value)
-        setattr(db_product, field, value)
-    db.commit()
-    db.refresh(db_product)
-    return db_product
+        setattr(product, field, value)
+    
+    await db.commit()
+    await db.refresh(product)
+    
+    return product
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_product(product_id:int, db: Session = Depends(get_db)):
-    db_product = db.query(ProductModel).filter(ProductModel.id == product_id).first()
-    if db_product is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Товар не найден"
-        )
-    db.delete(db_product)
-    db.commit()
+async def delete_product(
+    product_id: int, 
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Удалить продукт
+    """
+    result = await db.execute(
+        select(Product).where(Product.id == product_id)
+    )
+    product = result.scalar_one_or_none()
+    
+    if product is None:
+        raise HTTPException(status_code=404, detail="Продукт не найден")
+    
+    await db.delete(product)
+    await db.commit()
+    
     return None

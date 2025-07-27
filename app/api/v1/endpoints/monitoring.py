@@ -13,7 +13,7 @@ from app.schemas.monitoring import (
     TestTaskResponse
 )
 
-from app.tasks.price_monitoring import (
+from celery.price_monitoring import (
     test_task,
     monitor_product_prices, 
     monitor_all_products,
@@ -55,7 +55,7 @@ async def start_monitoring(request: MonitoringRequest, db: Session = Depends(get
 async def get_result(task_id: str, db: Session = Depends(get_db)):
     try:
         from celery.result import AsyncResult
-        from app.tasks.celery_app import celery_app
+        from celery.app import celery_app
 
         result = AsyncResult(task_id, app=celery_app)
         
@@ -119,7 +119,7 @@ async def get_all_tasks(db: Session = Depends(get_db)):
 async def stop_task(task_id: str, db: Session = Depends(get_db)):
     try:
         from celery.result import AsyncResult
-        from app.tasks.celery_app import celery_app
+        from celery.app import celery_app
         
         # Получаем задачу из базы данных
         db_task = db.query(TaskHistory).filter(TaskHistory.task_id == task_id).first()
@@ -147,7 +147,7 @@ async def stop_task(task_id: str, db: Session = Depends(get_db)):
 @router.get("/health")
 async def health_check(db: Session = Depends(get_db)):
     try:
-        from app.tasks.celery_app import celery_app
+        from celery.app import celery_app
         
         # Проверяем подключение к Celery
         celery_status = "ok"

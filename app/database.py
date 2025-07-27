@@ -1,34 +1,73 @@
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from app.config import settings
+"""
+Настройка базы данных
+"""
+import logging
+from contextlib import asynccontextmanager
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy.exc import SQLAlchemyError
 
-# Создаем engine для подключения к базе данных
-engine = create_engine(
+from .config import settings
+
+logger = logging.getLogger(__name__)
+
+class Base(DeclarativeBase):
+    pass
+
+engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=settings.DEBUG,  # Показывать SQL запросы в консоли при DEBUG=True
-    pool_pre_ping=True,   # Проверять соединение перед использованием
-    pool_recycle=300      # Пересоздавать соединения каждые 5 минут
+    echo=settings.DEBUG,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,
+    pool_recycle=300,
 )
 
-# Создаем фабрику сессий
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
+async_session_maker = async_sessionmaker(
+    engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
 )
 
-# Создаем базовый класс для моделей
-Base = declarative_base()
 
-# Функция для получения сессии базы данных
-def get_db():
-    db = SessionLocal()
+async def get_async_db() -> AsyncSession:
+    async with async_session_maker() as session:
+        try:
+            yield session
+        except SQLAlchemyError as e:
+            logger.error(f"Database session error: {e}")
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
+@asynccontextmanager
+async def get_async_session():
+    async with async_session_maker() as session:
+        try:
+            yield session
+        except SQLAlchemyError as e:
+            logger.error(f"Database session error: {e}")
+            await session.rollback()
+            raise
+        finally:
+            await session.close()
+
+
+async def init_db():
+    """Инициализация базы данных"""
+    from .models import user, product, price_history, task_history
+    
     try:
-        yield db
-    finally:
-        db.close()
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("Database tables created successfully")
+    except Exception as e:
+        logger.error(f"Failed to create tables: {e}")
+        raise
 
-# Функция для создания всех таблиц
-def create_tables():
-    Base.metadata.create_all(bind=engine)
+
+async def close_db():
+    """Закрытие соединения с базой данных"""
+    await engine.dispose()

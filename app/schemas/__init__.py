@@ -1,18 +1,7 @@
 from .user import User, UserCreate, UserUpdate
 from .product import Product, ProductCreate, ProductUpdate
-from .price_history import PriceHistory, PriceHistoryCreate, PriceHistoryUpdate
-from .monitoring import (
-    MonitoringRequest,
-    MonitoringResponse, 
-    TaskResultResponse,
-    MarketplaceRequest,
-    MarketplaceResponse,
-    PriceResult,
-    ArbitrageAnalysis,
-    MonitoringResult,
-    TaskListResponse,
-    TestTaskResponse
-)
+from .price_history import PriceHistory, PriceHistoryCreate
+from .monitoring import ProductMatch, MonitoringTask
 
 __all__ = [
     # User schemas

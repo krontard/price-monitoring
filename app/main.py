@@ -1,24 +1,26 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+"""
+Основное приложение FastAPI
+"""
+import logging
 from contextlib import asynccontextmanager
-from app.config import settings
-from app.database import create_tables
-from app.api.v1.api import api_router
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+from .database import init_db, close_db
+from .api.v1.api import api_router
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    print("🚀 Запуск приложения...")
-    try:
-        create_tables()
-        print("✅ Таблицы базы данных созданы!")
-    except Exception as e:
-        print(f"❌ Ошибка создания таблиц: {e}")
+    await init_db()
     yield
-    print("🛑 Остановка приложения...")
+    await close_db()
+
 
 app = FastAPI(
-    title="Arbitration Price Monitoring",
-    description="Система мониторинга цен на товары",
+    title="Arbitration API",
+    description="API для арбитража товаров между маркетплейсами",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -31,31 +33,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Попробуем подключить роутеры с обработкой ошибок
 try:
-    from app.api.v1.api import api_router
     app.include_router(api_router, prefix="/api/v1")
-    print("✅ API роутеры подключены успешно!")
 except Exception as e:
-    print(f"❌ Ошибка подключения API роутеров: {e}")
+    logging.error(f"Failed to include API router: {e}")
+
 
 @app.get("/")
 async def root():
-    return {
-        "message": "Arbitration Price Monitoring API",
-        "status": "running",
-        "version": "1.0.0"
-    }
+    return {"message": "Arbitration API is running!"}
+
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "message": "API is working correctly"}
 
-@app.get("/info")
-async def get_info():
-    return {
-        "name": "Arbitration Price Monitoring",
-        "version": "1.0.0",
-        "environment": settings.ENVIRONMENT,
-        "debug": settings.DEBUG,
-    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True
+    )
